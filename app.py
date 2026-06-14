@@ -4,7 +4,7 @@ from datetime import datetime
 import streamlit as st
 
 class DatabaseManager:
-    def __init__(self, db_name="institute_management.db"):
+    def __init__(self, db_name="institute_management_v3.db"):
         self.db_name = db_name
         self.create_tables()
 
