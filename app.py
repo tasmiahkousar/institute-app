@@ -133,6 +133,31 @@ if choice == "Course Administration":
             st.table([{"ID": c[0], "Course Name": c[1], "Subjects": c[4] if len(c) > 4 else "N/A", "Duration (Months)": c[2], "Fee (PKR)": c[3]} for c in courses])
         else:
             st.info("No courses available.")
+    with tab3:
+        st.subheader("📝 Add/Update Subjects for Existing Courses")
+        # Fetch all existing courses to populate a dropdown menu
+        existing_courses = db.fetch_query("SELECT course_id, course_name FROM courses;")
+        
+        if not existing_courses:
+            st.info("No courses available to update.")
+        else:
+            with st.form("update_subjects_form"):
+                # Create a dictionary to map Course Name -> Course ID
+                course_mapping = {c[1]: c[0] for c in existing_courses}
+                selected_course_name = st.selectbox("Select Course to Update", list(course_mapping.keys()))
+                
+                # Input for the subjects
+                new_subjects = st.text_input("Type Subjects (e.g., Photoshop, Illustrator, InDesign)")
+                
+                submit_update = st.form_submit_button("Update Subjects")
+                
+                if submit_update and new_subjects:
+                    target_id = course_mapping[selected_course_name]
+                    query = "UPDATE courses SET subjects = ? WHERE course_id = ?;"
+                    
+                    if db.execute_query(query, (new_subjects, target_id)):
+                        st.success(f"Successfully updated subjects for '{selected_course_name}'!")
+                        st.rerun()
 
 # ==================== STUDENT MANAGEMENT ====================
 elif choice == "Student Management":
