@@ -5,21 +5,26 @@ import streamlit as st
 
 class DatabaseManager:
     def __init__(self, db_name="institute_management.db"):
-        self.conn = sqlite3.connect(db_name, check_same_thread=False)
-        self.cursor = self.conn.cursor()
+        self.db_name = db_name
         self.create_tables()
 
     def create_tables(self):
-        self.cursor.execute("PRAGMA foreign_keys = ON;")
-        self.cursor.execute("""
+        conn = sqlite3.connect(self.db_name, timeout=30)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA foreign_keys = ON;")
+        
+        # Updated Courses table with subjects column
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS courses (
                 course_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 course_name TEXT NOT NULL UNIQUE,
                 duration_months INTEGER NOT NULL,
-                fee REAL NOT NULL
+                fee REAL NOT NULL,
+                subjects TEXT
             );
         """)
-        self.cursor.execute("""
+        
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS students (
                 student_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -27,7 +32,8 @@ class DatabaseManager:
                 email TEXT
             );
         """)
-        self.cursor.execute("""
+        
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS enrollments (
                 enrollment_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 student_id INTEGER,
@@ -38,7 +44,8 @@ class DatabaseManager:
                 FOREIGN KEY (course_id) REFERENCES courses(course_id) ON DELETE CASCADE
             );
         """)
-        self.cursor.execute("""
+        
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS graphics_orders (
                 order_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 client_name TEXT NOT NULL,
@@ -50,12 +57,29 @@ class DatabaseManager:
                 status TEXT DEFAULT 'Pending'
             );
         """)
-        self.conn.commit()
+
+        # New Attendance Table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS attendance (
+                attendance_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id INTEGER,
+                date TEXT NOT NULL,
+                status TEXT NOT NULL,
+                FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+            );
+        """)
+        
+        conn.commit()
+        conn.close()
 
     def execute_query(self, query, params=()):
         try:
-            self.cursor.execute(query, params)
-            self.conn.commit()
+            conn = sqlite3.connect(self.db_name, timeout=30)
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = ON;")
+            cursor.execute(query, params)
+            conn.commit()
+            conn.close()
             return True
         except sqlite3.Error as e:
             st.error(f"Database Error: {e}")
@@ -63,8 +87,12 @@ class DatabaseManager:
 
     def fetch_query(self, query, params=()):
         try:
-            self.cursor.execute(query, params)
-            return self.cursor.fetchall()
+            conn = sqlite3.connect(self.db_name, timeout=30)
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+            conn.close()
+            return results
         except sqlite3.Error as e:
             st.error(f"Database Error: {e}")
             return []
@@ -89,18 +117,20 @@ if choice == "Course Administration":
     with tab1:
         with st.form("add_course_form"):
             name = st.text_input("Course Name")
+            subjects = st.text_input("Course Subjects (Separate with commas, e.g., Photoshop, Illustrator)")
             duration = st.number_input("Duration (Months)", min_value=1, step=1)
             fee = st.number_input("Total Fee (PKR)", min_value=0.0, step=100.0)
             submitted = st.form_submit_button("Add Course")
             if submitted and name:
-                query = "INSERT INTO courses (course_name, duration_months, fee) VALUES (?, ?, ?);"
-                if db.execute_query(query, (name, duration, fee)):
+                query = "INSERT INTO courses (course_name, duration_months, fee, subjects) VALUES (?, ?, ?, ?);"
+                if db.execute_query(query, (name, duration, fee, subjects)):
                     st.success(f"Course '{name}' added successfully!")
+                    st.rerun()
 
     with tab2:
         courses = db.fetch_query("SELECT * FROM courses;")
         if courses:
-            st.table([{"ID": c[0], "Course Name": c[1], "Duration (Months)": c[2], "Fee (PKR)": c[3]} for c in courses])
+            st.table([{"ID": c[0], "Course Name": c[1], "Subjects": c[4] if len(c) > 4 else "N/A", "Duration (Months)": c[2], "Fee (PKR)": c[3]} for c in courses])
         else:
             st.info("No courses available.")
 
@@ -108,7 +138,7 @@ if choice == "Course Administration":
 elif choice == "Student Management":
     st.header("👥 Student Management")
     
-    tab1, tab2, tab3 = st.tabs(["Register Student", "Enroll Student", "Enrollment Roster"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Register Student", "Enroll Student", "Enrollment Roster", "Take Attendance", "Attendance Log"])
     
     with tab1:
         with st.form("register_student_form"):
@@ -120,6 +150,7 @@ elif choice == "Student Management":
                 query = "INSERT INTO students (name, phone, email) VALUES (?, ?, ?);"
                 if db.execute_query(query, (s_name, s_phone, s_email)):
                     st.success(f"Student '{s_name}' registered successfully!")
+                    st.rerun()
 
     with tab2:
         courses = db.fetch_query("SELECT course_id, course_name FROM courses;")
@@ -141,6 +172,7 @@ elif choice == "Student Management":
                     query = "INSERT INTO enrollments (student_id, course_id, enrollment_date) VALUES (?, ?, ?);"
                     if db.execute_query(query, (student_options[selected_student], course_options[selected_course], today_str)):
                         st.success(f"Enrolled successfully!")
+                        st.rerun()
 
     with tab3:
         query = """
@@ -154,6 +186,53 @@ elif choice == "Student Management":
             st.table([{"ID": r[0], "Student Name": r[1], "Course Enrolled": r[2], "Date": r[3], "Status": r[4]} for r in records])
         else:
             st.info("No active enrollments found.")
+
+    with tab4:
+        st.subheader("📝 Daily Attendance Sheet")
+        today_date = datetime.today().strftime('%Y-%m-%d')
+        st.info(f"Marking attendance for today: **{today_date}**")
+        
+        all_students = db.fetch_query("SELECT student_id, name FROM students;")
+        
+        if not all_students:
+            st.info("No students registered yet.")
+        else:
+            with st.form("attendance_form"):
+                attendance_data = {}
+                for s in all_students:
+                    # Creates a checkbox for each student. Checked = Present, Unchecked = Absent
+                    is_present = st.checkbox(f"{s[1]} (ID: {s[0]})", value=True)
+                    attendance_data[s[0]] = "Present" if is_present else "Absent"
+                
+                submit_attendance = st.form_submit_button("Save Attendance")
+                
+                if submit_attendance:
+                    success = True
+                    for student_id, status in attendance_data.items():
+                        # To prevent duplicate logs for the same day, remove any old entry for today first
+                        db.execute_query("DELETE FROM attendance WHERE student_id = ? AND date = ?;", (student_id, today_date))
+                        # Insert new status
+                        query = "INSERT INTO attendance (student_id, date, status) VALUES (?, ?, ?);"
+                        if not db.execute_query(query, (student_id, today_date, status)):
+                            success = False
+                    
+                    if success:
+                        st.success("Attendance updated successfully for today!")
+                        st.rerun()
+
+    with tab5:
+        st.subheader("📊 Historical Attendance Records")
+        query = """
+            SELECT a.date, s.name, a.status 
+            FROM attendance a
+            JOIN students s ON a.student_id = s.student_id
+            ORDER BY a.date DESC, s.name ASC;
+        """
+        logs = db.fetch_query(query)
+        if logs:
+            st.table([{"Date": l[0], "Student Name": l[1], "Attendance Status": l[2]} for l in logs])
+        else:
+            st.info("No attendance records found.")
 
 # ==================== GRAPHICS ORDER MANAGEMENT ====================
 elif choice == "Commercial Graphics Work":
@@ -179,6 +258,7 @@ elif choice == "Commercial Graphics Work":
                 """
                 if db.execute_query(query, (client, phone, desc, total, paid, today_str, status)):
                     st.success(f"Graphics order for '{client}' logged!")
+                    st.rerun()
 
     with tab2:
         orders = db.fetch_query("SELECT * FROM graphics_orders;")
