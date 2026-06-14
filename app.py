@@ -13,7 +13,7 @@ class DatabaseManager:
         cursor = conn.cursor()
         cursor.execute("PRAGMA foreign_keys = ON;")
         
-        # Updated Courses table with subjects column
+        # Courses table with subjects column included
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS courses (
                 course_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,7 +58,7 @@ class DatabaseManager:
             );
         """)
 
-        # New Attendance Table
+        # Student Attendance tracking table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS attendance (
                 attendance_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,14 +97,14 @@ class DatabaseManager:
             st.error(f"Database Error: {e}")
             return []
 
-# Initialize Database
+# Initialize Database Controller
 db = DatabaseManager()
 
-# Streamlit UI Setup
+# Streamlit UI Window Configuration
 st.set_page_config(page_title="Institute & Graphics Management", layout="wide")
 st.title("🎓 Institute & Graphics Management System")
 
-# Sidebar navigation
+# Sidebar Application Navigation
 menu = ["Course Administration", "Student Management", "Commercial Graphics Work"]
 choice = st.sidebar.selectbox("Navigate Modules", menu)
 
@@ -112,7 +112,8 @@ choice = st.sidebar.selectbox("Navigate Modules", menu)
 if choice == "Course Administration":
     st.header("📚 Course Administration")
     
-    tab1, tab2 = st.tabs(["Add New Course", "View Existing Courses"])
+    # Clean three-tab declaration to prevent structural definition errors
+    tab1, tab2, tab3 = st.tabs(["Add New Course", "View Existing Courses", "Update Course Subjects"])
     
     with tab1:
         with st.form("add_course_form"):
@@ -133,28 +134,23 @@ if choice == "Course Administration":
             st.table([{"ID": c[0], "Course Name": c[1], "Subjects": c[4] if len(c) > 4 else "N/A", "Duration (Months)": c[2], "Fee (PKR)": c[3]} for c in courses])
         else:
             st.info("No courses available.")
+
     with tab3:
         st.subheader("📝 Add/Update Subjects for Existing Courses")
-        # Fetch all existing courses to populate a dropdown menu
         existing_courses = db.fetch_query("SELECT course_id, course_name FROM courses;")
         
         if not existing_courses:
             st.info("No courses available to update.")
         else:
             with st.form("update_subjects_form"):
-                # Create a dictionary to map Course Name -> Course ID
                 course_mapping = {c[1]: c[0] for c in existing_courses}
                 selected_course_name = st.selectbox("Select Course to Update", list(course_mapping.keys()))
-                
-                # Input for the subjects
                 new_subjects = st.text_input("Type Subjects (e.g., Photoshop, Illustrator, InDesign)")
-                
                 submit_update = st.form_submit_button("Update Subjects")
                 
                 if submit_update and new_subjects:
                     target_id = course_mapping[selected_course_name]
                     query = "UPDATE courses SET subjects = ? WHERE course_id = ?;"
-                    
                     if db.execute_query(query, (new_subjects, target_id)):
                         st.success(f"Successfully updated subjects for '{selected_course_name}'!")
                         st.rerun()
@@ -225,7 +221,7 @@ elif choice == "Student Management":
             with st.form("attendance_form"):
                 attendance_data = {}
                 for s in all_students:
-                    # Creates a checkbox for each student. Checked = Present, Unchecked = Absent
+                    # Renders interactive checkbox arrays per registered identity profile
                     is_present = st.checkbox(f"{s[1]} (ID: {s[0]})", value=True)
                     attendance_data[s[0]] = "Present" if is_present else "Absent"
                 
@@ -234,9 +230,8 @@ elif choice == "Student Management":
                 if submit_attendance:
                     success = True
                     for student_id, status in attendance_data.items():
-                        # To prevent duplicate logs for the same day, remove any old entry for today first
+                        # Clears overlapping logs for today to protect file constraints
                         db.execute_query("DELETE FROM attendance WHERE student_id = ? AND date = ?;", (student_id, today_date))
-                        # Insert new status
                         query = "INSERT INTO attendance (student_id, date, status) VALUES (?, ?, ?);"
                         if not db.execute_query(query, (student_id, today_date, status)):
                             success = False
