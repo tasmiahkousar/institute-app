@@ -1,3 +1,63 @@
+import streamlit as st
+import psycopg2
+
+# --- YOUR EXISTING IMPORTS & HELPER FUNCTIONS GO HERE ---
+
+st.set_page_config(page_title="Institute Portal", layout="wide")
+
+# Database Credentials Check
+def check_credentials(username, password):
+    try:
+        conn = psycopg2.connect(st.secrets["postgres"]["url"])
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT role FROM users WHERE username = %s AND password = %s;", 
+            (username, password)
+        )
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else None
+    except Exception as e:
+        st.error(f"Database error: {e}")
+        return None
+
+# Session State Initialization
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+if "role" not in st.session_state:
+    st.session_state["role"] = None
+
+# 1. LOGIN SCREEN (Show this if NOT logged in)
+if not st.session_state["authenticated"]:
+    st.title("🔐 Institute Portal Login")
+    
+    with st.form("login_form"):
+        user = st.text_input("Username")
+        pwd = st.text_input("Password", type="password")
+        submit = st.form_submit_button("Login")
+        
+        if submit:
+            role = check_credentials(user, pwd)
+            if role:
+                st.session_state["authenticated"] = True
+                st.session_state["role"] = role
+                st.rerun()
+            else:
+                st.error("Invalid Username or Password")
+
+# 2. YOUR MAIN APP (Show this ONLY when logged in)
+else:
+    # Logout button in the sidebar
+    st.sidebar.write(f"Logged in as: **{st.session_state['role'].upper()}**")
+    if st.sidebar.button("Logout"):
+        st.session_state["authenticated"] = False
+        st.session_state["role"] = None
+        st.rerun()
+
+    # =========================================================
+    # PASTE ALL YOUR PREVIOUS 265 LINES OF APP CODE BELOW HERE
+    # =========================================================
+    
 import os
 from datetime import datetime
 import streamlit as st
@@ -263,73 +323,4 @@ elif choice == "Commercial Graphics Work":
             st.table([{"ID": o[0], "Client": o[1], "Description": o[3], "Total": float(o[4]), "Paid": float(o[5]), "Balance": float(o[4]-o[5]), "Status": o[7]} for o in orders])
         else:
             st.info("No graphics orders recorded yet.")
-
-import streamlit as st
-import psycopg2
-
-# Page Configuration
-st.set_page_config(page_title="Institute Portal", layout="wide")
-
-# Database Credentials Check
-def check_credentials(username, password):
-    try:
-        conn = psycopg2.connect(st.secrets["postgres"]["url"])
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT role FROM users WHERE username = %s AND password = %s;", 
-            (username, password)
-        )
-        result = cursor.fetchone()
-        conn.close()
-        return result[0] if result else None
-    except Exception as e:
-        st.error(f"Database error: {e}")
-        return None
-
-# Session State Initialization
-if "authenticated" not in st.session_state:
-    st.session_state["authenticated"] = False
-if "role" not in st.session_state:
-    st.session_state["role"] = None
-
-# Login Interface
-if not st.session_state["authenticated"]:
-    st.title("🔐 Institute Portal Login")
-    
-    with st.form("login_form"):
-        user = st.text_input("Username")
-        pwd = st.text_input("Password", type="password")
-        submit = st.form_submit_button("Login")
-        
-        if submit:
-            role = check_credentials(user, pwd)
-            if role:
-                st.session_state["authenticated"] = True
-                st.session_state["role"] = role
-                st.rerun()
-            else:
-                st.error("Invalid Username or Password")
-
-# Authenticated App Interface
-else:
-    # Sidebar Controls
-    st.sidebar.title("Navigation")
-    st.sidebar.write(f"Logged in as: **{st.session_state['role'].upper()}**")
-    
-    if st.sidebar.button("Logout"):
-        st.session_state["authenticated"] = False
-        st.session_state["role"] = None
-        st.rerun()
-
-    # Main Dashboard Area
-    st.title("🎓 Institute Management Dashboard")
-    st.write("Welcome to the secure database panel!")
-
-    # Role-Based Permissions Example
-    if st.session_state["role"] == "admin":
-        st.success("Admin Access Granted: You can edit and view all records.")
-        # Place your admin-only forms/inputs here
-    else:
-        st.info("User Access Granted: Read-only mode.")
-        # Place your view-only tables here
 
