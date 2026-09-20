@@ -62,30 +62,86 @@ if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "role" not in st.session_state:
     st.session_state["role"] = None
+if "username" not in st.session_state:
+    st.session_state["username"] = None
 
-# ==================== 1. LOGIN INTERFACE ====================
+# ==================== 1. LOGIN & ACCOUNT MANAGEMENT INTERFACE ====================
 if not st.session_state["authenticated"]:
-    st.title("🔐 Institute Portal Login")
+    st.title("🔐 Institute Portal Gateway")
     
-    with st.form("login_form"):
-        user = st.text_input("Username")
-        pwd = st.text_input("Password", type="password")
-        submit = st.form_submit_button("Login")
-        
-        if submit:
-            role = check_credentials(user, pwd)
-            if role:
-                st.session_state["authenticated"] = True
-                st.session_state["role"] = role
-                st.rerun()
-            else:
-                st.error("Invalid Username or Password")
+    auth_tab1, auth_tab2, auth_tab3 = st.tabs(["🔑 Login", "👤 Create Account", "🔄 Reset Password"])
+    
+    # --- TAB 1: LOGIN ---
+    with auth_tab1:
+        with st.form("login_form"):
+            user = st.text_input("Username")
+            pwd = st.text_input("Password", type="password")
+            submit = st.form_submit_button("Login")
+            
+            if submit:
+                role = check_credentials(user, pwd)
+                if role:
+                    st.session_state["authenticated"] = True
+                    st.session_state["role"] = role
+                    st.session_state["username"] = user
+                    st.rerun()
+                else:
+                    st.error("Invalid Username or Password")
+
+    # --- TAB 2: CREATE ACCOUNT ---
+    with auth_tab2:
+        with st.form("create_account_form"):
+            st.subheader("Create New Portal Account")
+            new_user = st.text_input("Choose Username")
+            new_pass = st.text_input("Choose Password", type="password")
+            confirm_pass = st.text_input("Confirm Password", type="password")
+            user_role = st.selectbox("Account Role", ["admin", "staff", "student"])
+            submit_create = st.form_submit_button("Register Account")
+            
+            if submit_create:
+                if not new_user or not new_pass:
+                    st.error("Please fill out all fields.")
+                elif new_pass != confirm_pass:
+                    st.error("Passwords do not match.")
+                else:
+                    # Check if username already exists
+                    existing = fetch_query("SELECT username FROM users WHERE username = %s;", (new_user,))
+                    if existing:
+                        st.error("Username already taken. Please choose another.")
+                    else:
+                        q = "INSERT INTO users (username, password, role) VALUES (:user, :pass, :role);"
+                        if execute_query(q, {"user": new_user, "pass": new_pass, "role": user_role}):
+                            st.success(f"Account for '{new_user}' created! You can now log in.")
+
+    # --- TAB 3: RESET PASSWORD ---
+    with auth_tab3:
+        with st.form("reset_password_form"):
+            st.subheader("Reset User Password")
+            reset_user = st.text_input("Your Username")
+            old_pass = st.text_input("Current Password", type="password")
+            updated_pass = st.text_input("New Password", type="password")
+            confirm_updated_pass = st.text_input("Confirm New Password", type="password")
+            submit_reset = st.form_submit_button("Update Password")
+            
+            if submit_reset:
+                if not reset_user or not old_pass or not updated_pass:
+                    st.error("Please fill out all fields.")
+                elif updated_pass != confirm_updated_pass:
+                    st.error("New passwords do not match.")
+                else:
+                    valid_role = check_credentials(reset_user, old_pass)
+                    if not valid_role:
+                        st.error("Invalid username or current password.")
+                    else:
+                        q = "UPDATE users SET password = :pass WHERE username = :user;"
+                        if execute_query(q, {"pass": updated_pass, "user": reset_user}):
+                            st.success(f"Password updated for '{reset_user}'! You can now log in with your new password.")
 
 # ==================== 2. MAIN APPLICATION INTERFACE ====================
 else:
     # Sidebar Navigation & User Info
     st.sidebar.title("📌 Navigation")
-    st.sidebar.write(f"Logged in as: **{st.session_state['role'].upper()}**")
+    st.sidebar.write(f"Logged in as: **{st.session_state['role'].upper()}** ({st.session_state['username']})")
     
     choice = st.sidebar.radio(
         "Select Module:",
@@ -95,6 +151,7 @@ else:
     if st.sidebar.button("Logout"):
         st.session_state["authenticated"] = False
         st.session_state["role"] = None
+        st.session_state["username"] = None
         st.rerun()
 
     # -------------------- MODULE 1: COURSE ADMINISTRATION --------------------
