@@ -12,6 +12,5 @@ jobs:
     steps:
       - name: Ping Streamlit App
         run: |
-          curl -L -s -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" https://institute-app-kgur4uduugergbmaxkobvn.streamlit.app/ > /dev/null
-          echo "App pinged successfully!"
-
+          curl -L -k --silent --output /dev/null --write-out "%{http_code}\n" -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "https://institute-app-kgur4uduugergbmaxkobvn.streamlit.app/" || true
+          echo "Ping executed successfully!"
