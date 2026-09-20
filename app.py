@@ -100,24 +100,62 @@ else:
     # -------------------- MODULE 1: COURSE ADMINISTRATION --------------------
     if choice == "Course Administration":
         st.header("🎓 Course Administration")
-        st.subheader("📝 Add/Update Subjects for Existing Courses")
         
-        existing_courses = fetch_query("SELECT course_id, course_name FROM courses;")
-        if not existing_courses:
-            st.info("No courses available to update.")
-        else:
-            with st.form("update_subjects_form"):
-                course_mapping = {c[1]: c[0] for c in existing_courses}
-                selected_course_name = st.selectbox("Select Course to Update", list(course_mapping.keys()))
-                new_subjects = st.text_input("Type Subjects (e.g., Photoshop, Illustrator)")
-                submit_update = st.form_submit_button("Update Subjects")
+        tab1, tab2, tab3 = st.tabs(["View All Courses", "Add New Course", "Update Subjects"])
+        
+        # TAB 1: View existing courses
+        with tab1:
+            st.subheader("📚 Existing Courses List")
+            courses = fetch_query("SELECT course_id, course_name, subjects, duration_months, total_fee FROM courses ORDER BY course_id ASC;")
+            if courses:
+                st.table([
+                    {
+                        "ID": c[0], 
+                        "Course Name": c[1], 
+                        "Subjects": c[2] if c[2] else "N/A", 
+                        "Duration (Months)": c[3], 
+                        "Total Fee (PKR)": float(c[4]) if c[4] else 0.0
+                    } 
+                    for c in courses
+                ])
+            else:
+                st.info("No courses found in database.")
+
+        # TAB 2: Add a new course
+        with tab2:
+            st.subheader("➕ Create New Course")
+            with st.form("add_course_form"):
+                c_name = st.text_input("Course Name")
+                c_subjects = st.text_input("Course Subjects (e.g. Graphic Design, Video Editing)")
+                c_duration = st.number_input("Duration (Months)", min_value=1, value=1)
+                c_fee = st.number_input("Total Fee (PKR)", min_value=0.0, step=500.0)
+                submit_course = st.form_submit_button("Add Course")
                 
-                if submit_update and new_subjects:
-                    target_id = course_mapping[selected_course_name]
-                    q = "UPDATE courses SET subjects = :subjects WHERE course_id = :id;"
-                    if execute_query(q, {"subjects": new_subjects, "id": target_id}):
-                        st.success(f"Updated subjects for '{selected_course_name}'!")
+                if submit_course and c_name:
+                    q = "INSERT INTO courses (course_name, subjects, duration_months, total_fee) VALUES (:name, :subjects, :duration, :fee);"
+                    if execute_query(q, {"name": c_name, "subjects": c_subjects, "duration": c_duration, "fee": c_fee}):
+                        st.success(f"Course '{c_name}' created successfully!")
                         st.rerun()
+
+        # TAB 3: Update subjects for existing courses
+        with tab3:
+            st.subheader("📝 Add/Update Subjects for Existing Courses")
+            existing_courses = fetch_query("SELECT course_id, course_name FROM courses;")
+            if not existing_courses:
+                st.info("No courses available to update.")
+            else:
+                with st.form("update_subjects_form"):
+                    course_mapping = {c[1]: c[0] for c in existing_courses}
+                    selected_course_name = st.selectbox("Select Course to Update", list(course_mapping.keys()))
+                    new_subjects = st.text_input("Type Subjects (e.g., Photoshop, Illustrator)")
+                    submit_update = st.form_submit_button("Update Subjects")
+                    
+                    if submit_update and new_subjects:
+                        target_id = course_mapping[selected_course_name]
+                        q = "UPDATE courses SET subjects = :subjects WHERE course_id = :id;"
+                        if execute_query(q, {"subjects": new_subjects, "id": target_id}):
+                            st.success(f"Updated subjects for '{selected_course_name}'!")
+                            st.rerun()
 
     # -------------------- MODULE 2: STUDENT MANAGEMENT --------------------
     elif choice == "Student Management":
@@ -239,4 +277,3 @@ else:
                 st.table([{"ID": o[0], "Client": o[1], "Description": o[3], "Total": float(o[4]), "Paid": float(o[5]), "Balance": float(o[4]-o[5]), "Status": o[7]} for o in orders])
             else:
                 st.info("No graphics orders recorded yet.")
-
